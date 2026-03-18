@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+<meta charset="UTF-8">
+<title>Enviar Lição</title>
+</head>
+
+<body>
+
+<h1>Enviar foto da lousa</h1>
+
+<select id="dia">
+<option>Segunda</option>
+<option>Terça</option>
+<option>Quarta</option>
+<option>Quinta</option>
+<option>Sexta</option>
+</select>
+
+<input id="materia" placeholder="Matéria">
+
+<input type="file" id="foto">
+
+<button onclick="enviar()">Enviar</button>
+
+<script type="module">
+
+import { storage } from "./firebase.js"
+
+import {
+ref,
+uploadBytes
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js"
+
+function enviar(){
+
+let sala = localStorage.getItem("salaRep")
+
+let dia = document.getElementById("dia").value
+
+let materia = document.getElementById("materia").value
+
+let foto = document.getElementById("foto").files[0]
+
+if(!foto) return alert("Escolha uma foto")
+
+let caminho = "licoes/"+sala+"/"+dia+"/"+materia+"_"+Date.now()+".jpg"
+
+const storageRef = ref(storage, caminho)
+
+uploadBytes(storageRef, foto).then(()=>{
+
+alert("Foto enviada!")
+
+})
+
+}
+
+window.enviar = enviar
+
+</script>
+
+</body>
+
+</html>

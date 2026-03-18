@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AluBoard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+  <h1>⬡ AluBoard</h1>
+
+  <input id="salaBusca" placeholder="Digite sua sala (ex: 3A)">
+  <button id="btnVerLicoes">Ver Lições</button>
+
+  <hr>
+
+  <button id="btnToggleRep" class="secondary">▸ Área do Representante</button>
+
+  <div id="areaRepresentante" style="display:none">
+    <div id="login">
+      <h2>Login Representante</h2>
+      <input id="usuario" placeholder="Usuário">
+      <input id="senha" type="password" placeholder="Senha">
+      <button id="btnLogin">Entrar</button>
+    </div>
+
+    <div id="painel" style="display:none">
+      <h2>Painel do Representante</h2>
+      <input id="sala" placeholder="Sala">
+      <input id="materia" placeholder="Matéria">
+      <select id="dia">
+        <option value="Segunda">Segunda</option>
+        <option value="Terca">Terça</option>
+        <option value="Quarta">Quarta</option>
+        <option value="Quinta">Quinta</option>
+        <option value="Sexta">Sexta</option>
+      </select>
+      <input type="file" id="imagem" accept="image/*">
+      <button id="btnEnviar">Enviar Imagem</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ⚠️ Após deploy do backend, troca essa URL pela URL do Render/Railway
+const API_URL = "https://aluboard-api.onrender.com";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBlv14QREYv_qOFquKCJvorGlLOEqfpmTE",
+  authDomain: "aluboard.firebaseapp.com",
+  projectId: "aluboard",
+  storageBucket: "aluboard.appspot.com",
+  messagingSenderId: "582046047061",
+  appId: "1:582046047061:web:bbdfb59676475e2441eddc"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+const CLOUD_NAME    = "dpwv9zt7h";
+const UPLOAD_PRESET = "aluboard";
+let salaRepresentante = "";
+
+function mostrarToast(msg) {
+  const toast = document.getElementById("toast");
+  toast.innerText = msg;
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 3000);
+}
+
+document.getElementById("btnVerLicoes").addEventListener("click", () => {
+  const sala = document.getElementById("salaBusca").value.trim().toUpperCase();
+  if (!sala) { mostrarToast("Digite sua sala"); return; }
+  window.location.href = "sala.html?sala=" + sala;
+});
+
+document.getElementById("salaBusca").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const sala = document.getElementById("salaBusca").value.trim().toUpperCase();
+  if (!sala) { mostrarToast("Digite sua sala"); return; }
+  window.location.href = "sala.html?sala=" + sala;
+});
+
+document.getElementById("btnToggleRep").addEventListener("click", () => {
+  const area = document.getElementById("areaRepresentante");
+  area.style.display = area.style.display === "block" ? "none" : "block";
+});
+
+document.getElementById("btnLogin").addEventListener("click", async () => {
+  const usuario = document.getElementById("usuario").value.trim();
+  const senha   = document.getElementById("senha").value.trim();
+  if (!usuario || !senha) { mostrarToast("Preencha todos os campos"); return; }
+
+  try {
+    const res = await fetch(API_URL + "/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario, senha })
+    });
+    const data = await res.json();
+    if (!res.ok) { mostrarToast(data.erro || "Erro no login"); return; }
+
+    // Salva token na sessão
+    sessionStorage.setItem("token", data.token);
+    sessionStorage.setItem("sala", data.sala);
+    salaRepresentante = data.sala;
+
+    document.getElementById("login").style.display  = "none";
+    document.getElementById("painel").style.display = "block";
+    const s = document.getElementById("sala");
+    s.value    = salaRepresentante;
+    s.disabled = true;
+    mostrarToast("Login realizado ✓");
+  } catch(e) {
+    console.error(e);
+    mostrarToast("Erro ao conectar ao servidor");
+  }
+});
+
+document.getElementById("senha").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("btnLogin").click();
+});
+
+document.getElementById("btnEnviar").addEventListener("click", async () => {
+  const token = sessionStorage.getItem("token");
+  if (!token) { mostrarToast("Faça login primeiro"); return; }
+
+  const materia = document.getElementById("materia").value.trim();
+  const dia     = document.getElementById("dia").value;
+  const file    = document.getElementById("imagem").files[0];
+  if (!file)    { mostrarToast("Escolha uma imagem"); return; }
+  if (!materia) { mostrarToast("Digite a matéria"); return; }
+
+  // Verifica token no backend
+  const verif = await fetch(API_URL + "/verificar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token })
+  });
+  const verifData = await verif.json();
+  if (!verifData.valido) { mostrarToast("Sessão expirada, faça login novamente"); return; }
+
+  salaRepresentante = verifData.sala;
+  mostrarToast("Enviando...");
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", UPLOAD_PRESET);
+  formData.append("folder", "aluboard/" + salaRepresentante + "/" + dia);
+  formData.append("public_id", materia + "_" + Date.now());
+
+  try {
+    const res = await fetch("https://api.cloudinary.com/v1_1/" + CLOUD_NAME + "/image/upload", {
+      method: "POST",
+      body: formData
+    });
+    if (!res.ok) throw new Error("Erro upload");
+    const data = await res.json();
+
+    await addDoc(collection(db, "licoes"), {
+      sala:    salaRepresentante,
+      dia:     dia,
+      materia: materia,
+      url:     data.secure_url,
+      data:    Date.now()
+    });
+
+    mostrarToast("Imagem enviada ✓");
+    document.getElementById("imagem").value  = "";
+    document.getElementById("materia").value = "";
+  } catch(e) {
+    console.error(e);
+    mostrarToast("Erro ao enviar imagem");
+  }
+});
+</script>
+
+</body>
+</html>
